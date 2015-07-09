@@ -75,7 +75,14 @@ namespace boost
     a & x.key;
     a & x.mix_attr;
   }
-
+  
+  template <class Archive>
+  inline void serialize(Archive &a, cryptonote::lui_txout_to_key &x, const boost::serialization::version_type ver)
+  {
+    a & x.key;
+    a & x.mix_attr;
+  }
+    
   template <class Archive>
   inline void serialize(Archive &a, cryptonote::txout_to_scripthash &x, const boost::serialization::version_type ver)
   {

@@ -209,6 +209,32 @@ NAN_METHOD(convert_blob_bb) {
     );
 }
 
+NAN_METHOD(convert_blob_lui) {
+    NanScope();
+
+    if (args.Length() < 1)
+        return THROW_ERROR_EXCEPTION("You must provide one argument.");
+
+    Local<Object> target = args[0]->ToObject();
+
+    if (!Buffer::HasInstance(target))
+        return THROW_ERROR_EXCEPTION("Argument should be a buffer object.");
+
+    blobdata input = std::string(Buffer::Data(target), Buffer::Length(target));
+    blobdata output = "";
+
+    //convert
+    lui_block b = AUTO_VAL_INIT(b);
+    if (!parse_and_validate_block_from_blob(input, b)) {
+        return THROW_ERROR_EXCEPTION("Failed to parse block");
+    }
+    output = get_block_hashing_blob(b);
+
+    NanReturnValue(
+        NanNewBufferHandle(output.data(), output.size())
+    );
+}
+
 NAN_METHOD(address_decode) {
     NanEscapableScope();
 
@@ -242,6 +268,7 @@ void init(Handle<Object> exports) {
     exports->Set(NanNew<String>("get_block_id"), NanNew<FunctionTemplate>(get_block_id)->GetFunction());
     exports->Set(NanNew<String>("convert_blob"), NanNew<FunctionTemplate>(convert_blob)->GetFunction());
     exports->Set(NanNew<String>("convert_blob_bb"), NanNew<FunctionTemplate>(convert_blob_bb)->GetFunction());
+    exports->Set(String::NewSymbol("convert_blob_lui"), FunctionTemplate::New(convert_blob_lui)->GetFunction());
     exports->Set(NanNew<String>("address_decode"), NanNew<FunctionTemplate>(address_decode)->GetFunction());
 }
 

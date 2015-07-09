@@ -80,6 +80,7 @@ namespace cryptonote
   bool get_block_hashing_blob(const block& b, blobdata& blob);
   bool get_bytecoin_block_hashing_blob(const block& b, blobdata& blob);
   blobdata get_block_hashing_blob(const bb_block& b);
+  blobdata get_block_hashing_blob(const lui_block& b);
   bool get_block_hash(const block& b, crypto::hash& res);
   crypto::hash get_block_hash(const block& b);
   bool get_block_header_hash(const block& b, crypto::hash& res);
@@ -90,6 +91,7 @@ namespace cryptonote
   bool get_genesis_block_hash(crypto::hash& h);
   bool parse_and_validate_block_from_blob(const blobdata& b_blob, block& b);
   bool parse_and_validate_block_from_blob(const blobdata& b_blob, bb_block& b);
+  bool parse_and_validate_block_from_blob(const blobdata& b_blob, lui_block& b);
   bool get_inputs_money_amount(const transaction& tx, uint64_t& money);
   uint64_t get_outs_money_amount(const transaction& tx);
   bool check_inputs_types_supported(const transaction& tx);
@@ -205,6 +207,7 @@ namespace cryptonote
   crypto::hash get_tx_tree_hash(const std::vector<crypto::hash>& tx_hashes);
   crypto::hash get_tx_tree_hash(const block& b);
   crypto::hash get_tx_tree_hash(const bb_block& b);
+  crypto::hash get_tx_tree_hash(const lui_block& b);
 
   bool check_proof_of_work_v1(const block& bl, difficulty_type current_diffic, crypto::hash& proof_of_work);
   bool check_proof_of_work_v2(const block& bl, difficulty_type current_diffic, crypto::hash& proof_of_work);

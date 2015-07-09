@@ -614,6 +614,13 @@ namespace cryptonote
   }
 
   //---------------------------------------------------------------
+  bool get_transaction_hash(const lui_transaction& t, crypto::hash& res)
+  {
+    size_t blob_size = 0;
+    return get_object_hash(static_cast<const lui_transaction_prefix&>(t), res, blob_size);
+  }
+  
+  //---------------------------------------------------------------
   bool get_transaction_hash(const transaction& t, crypto::hash& res, size_t& blob_size)
   {
     return get_object_hash(t, res, blob_size);
@@ -638,6 +645,14 @@ namespace cryptonote
   blobdata get_block_hashing_blob(const bb_block& b)
   {
     blobdata blob = t_serializable_object_to_blob(static_cast<bb_block_header>(b));
+    crypto::hash tree_root_hash = get_tx_tree_hash(b);
+    blob.append((const char*)&tree_root_hash, sizeof(tree_root_hash ));
+    blob.append(tools::get_varint_data(b.tx_hashes.size()+1));
+    return blob;
+  }
+  blobdata get_block_hashing_blob(const lui_block& b)
+  {
+    blobdata blob = t_serializable_object_to_blob(static_cast<lui_block_header>(b));
     crypto::hash tree_root_hash = get_tx_tree_hash(b);
     blob.append((const char*)&tree_root_hash, sizeof(tree_root_hash ));
     blob.append(tools::get_varint_data(b.tx_hashes.size()+1));
@@ -794,6 +809,16 @@ namespace cryptonote
     CHECK_AND_ASSERT_MES(r, false, "Failed to parse block from blob");
     return true;
   }
+    //---------------------------------------------------------------
+    bool parse_and_validate_block_from_blob(const blobdata& b_blob, lui_block& b)
+  {
+    std::stringstream ss;
+    ss << b_blob;
+    binary_archive<false> ba(ss);
+    bool r = ::serialization::serialize(ba, b);
+    CHECK_AND_ASSERT_MES(r, false, "Failed to parse block from blob");
+    return true;
+  }
   //---------------------------------------------------------------
   blobdata block_to_blob(const block& b)
   {
@@ -839,6 +864,17 @@ namespace cryptonote
     return get_tx_tree_hash(txs_ids);
   }
   crypto::hash get_tx_tree_hash(const bb_block& b)
+  {
+    std::vector<crypto::hash> txs_ids;
+    crypto::hash h = null_hash;
+    get_transaction_hash(b.miner_tx, h);
+    txs_ids.push_back(h);
+    BOOST_FOREACH(auto& th, b.tx_hashes)
+      txs_ids.push_back(th);
+    return get_tx_tree_hash(txs_ids);
+  }
+      //---------------------------------------------------------------
+  crypto::hash get_tx_tree_hash(const lui_block& b)
   {
     std::vector<crypto::hash> txs_ids;
     crypto::hash h = null_hash;
