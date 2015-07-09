@@ -268,7 +268,7 @@ void init(Handle<Object> exports) {
     exports->Set(NanNew<String>("get_block_id"), NanNew<FunctionTemplate>(get_block_id)->GetFunction());
     exports->Set(NanNew<String>("convert_blob"), NanNew<FunctionTemplate>(convert_blob)->GetFunction());
     exports->Set(NanNew<String>("convert_blob_bb"), NanNew<FunctionTemplate>(convert_blob_bb)->GetFunction());
-    exports->Set(String::NewSymbol("convert_blob_lui"), FunctionTemplate::New(convert_blob_lui)->GetFunction());
+    exports->Set(NanNew<String>("convert_blob_lui"), NanNew<FunctionTemplate>(convert_blob_lui)->GetFunction());
     exports->Set(NanNew<String>("address_decode"), NanNew<FunctionTemplate>(address_decode)->GetFunction());
 }
 
