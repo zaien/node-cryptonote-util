@@ -349,7 +349,7 @@ void address_decode_integrated(const Nan::FunctionCallbackInfo<v8::Value>& info)
 
 
     integrated_address iadr;
-    if (!::serialization::parse_binary(data, iadr) || !crypto::check_key(adr.m_spend_public_key) || !crypto::check_key(adr.m_view_public_key))
+    if (!::serialization::parse_binary(data, iadr) || !crypto::check_key(iadr.m_spend_public_key) || !crypto::check_key(iadr.m_view_public_key))
     {
         if(data.length())
         {
