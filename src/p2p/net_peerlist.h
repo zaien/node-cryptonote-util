@@ -1,6 +1,32 @@
-// Copyright (c) 2012-2013 The Cryptonote developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// Copyright (c) 2014-2016, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// 
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
 
@@ -10,8 +36,9 @@
 #include <boost/foreach.hpp>
 //#include <boost/bimap.hpp>
 //#include <boost/bimap/multiset_of.hpp>
-#include <boost/archive/binary_oarchive.hpp>
 #include <boost/archive/binary_iarchive.hpp>
+#include <boost/archive/portable_binary_oarchive.hpp>
+#include <boost/archive/portable_binary_iarchive.hpp>
 #include <boost/serialization/version.hpp>
 
 #include <boost/multi_index_container.hpp>
@@ -27,6 +54,7 @@
 #include "net_peerlist_boost_serialization.h"
 
 
+#define CURRENT_PEERLIST_STORAGE_ARCHIVE_VER    4
 
 namespace nodetool
 {
@@ -53,8 +81,8 @@ namespace nodetool
     bool set_peer_just_seen(peerid_type peer, const net_address& addr);
     bool set_peer_unreachable(const peerlist_entry& pr);
     bool is_ip_allowed(uint32_t ip);
-    void trim_white_peerlist();
-    void trim_gray_peerlist();
+    bool get_random_gray_peer(peerlist_entry& pe);
+    bool remove_from_peer_gray(const peerlist_entry& pe);
 
     
   private:
@@ -102,7 +130,7 @@ namespace nodetool
       // access by peerlist_entry::net_adress
       boost::multi_index::ordered_unique<boost::multi_index::tag<by_addr>, boost::multi_index::member<peerlist_entry,net_address,&peerlist_entry::adr> >,
       // sort by peerlist_entry::last_seen<
-      boost::multi_index::ordered_non_unique<boost::multi_index::tag<by_time>, boost::multi_index::member<peerlist_entry,time_t,&peerlist_entry::last_seen> >
+      boost::multi_index::ordered_non_unique<boost::multi_index::tag<by_time>, boost::multi_index::member<peerlist_entry,int64_t,&peerlist_entry::last_seen> >
       > 
     > peers_indexed;
 
@@ -114,7 +142,7 @@ namespace nodetool
       // access by peerlist_entry::net_adress
       boost::multi_index::ordered_unique<boost::multi_index::tag<by_addr>, boost::multi_index::member<peerlist_entry,net_address,&peerlist_entry::adr> >,
       // sort by peerlist_entry::last_seen<
-      boost::multi_index::ordered_non_unique<boost::multi_index::tag<by_time>, boost::multi_index::member<peerlist_entry,time_t,&peerlist_entry::last_seen> >
+      boost::multi_index::ordered_non_unique<boost::multi_index::tag<by_time>, boost::multi_index::member<peerlist_entry,int64_t,&peerlist_entry::last_seen> >
       > 
     > peers_indexed_old;
   public:    
@@ -139,6 +167,8 @@ namespace nodetool
 
   private: 
     bool peers_indexed_from_old(const peers_indexed_old& pio, peers_indexed& pi);
+    void trim_white_peerlist();
+    void trim_gray_peerlist();
 
     friend class boost::serialization::access;
     epee::critical_section m_peerlist_lock;
@@ -178,7 +208,7 @@ namespace nodetool
     return true;
   }
   //--------------------------------------------------------------------------------------------------
-  inline void peerlist_manager::trim_white_peerlist()
+  inline void peerlist_manager::trim_gray_peerlist()
   {
     while(m_peers_gray.size() > P2P_LOCAL_GRAY_PEERLIST_LIMIT)
     {
@@ -187,7 +217,7 @@ namespace nodetool
     }
   }
   //--------------------------------------------------------------------------------------------------
-  inline void peerlist_manager::trim_gray_peerlist()
+  inline void peerlist_manager::trim_white_peerlist()
   {
     while(m_peers_white.size() > P2P_LOCAL_WHITE_PEERLIST_LIMIT)
     {
@@ -257,9 +287,11 @@ namespace nodetool
     {
       if(!vl.last_seen)
         continue;
-      bs_head.push_back(vl);      
-      if(cnt++ > depth)
+
+      if(cnt++ >= depth)
         break;
+
+      bs_head.push_back(vl);
     }
     return true;
   }
@@ -363,9 +395,50 @@ namespace nodetool
     }
     return true;
     CATCH_ENTRY_L0("peerlist_manager::append_with_peer_gray()", false);
-    return true;
   }
   //--------------------------------------------------------------------------------------------------
+  inline
+  bool peerlist_manager::get_random_gray_peer(peerlist_entry& pe)
+  {
+    TRY_ENTRY();
+
+    CRITICAL_REGION_LOCAL(m_peerlist_lock);
+
+    if (m_peers_gray.empty()) {
+      return false;
+    }
+
+    size_t x = crypto::rand<size_t>() % (m_peers_gray.size() + 1);
+    size_t res = (x * x * x) / (m_peers_gray.size() * m_peers_gray.size()); //parabola \/
+
+    LOG_PRINT_L3("Random gray peer index=" << res << "(x="<< x << ", max_index=" << m_peers_gray.size() << ")");
+
+    peers_indexed::index<by_time>::type& by_time_index = m_peers_gray.get<by_time>();
+    pe = *epee::misc_utils::move_it_backward(--by_time_index.end(), res);
+
+    return true;
+
+    CATCH_ENTRY_L0("peerlist_manager::get_random_gray_peer()", false);
+  }
+  //--------------------------------------------------------------------------------------------------
+  inline
+  bool peerlist_manager::remove_from_peer_gray(const peerlist_entry& pe)
+  {
+    TRY_ENTRY();
+
+    CRITICAL_REGION_LOCAL(m_peerlist_lock);
+
+    peers_indexed::index_iterator<by_addr>::type iterator = m_peers_gray.get<by_addr>().find(pe.adr);
+
+    if (iterator != m_peers_gray.get<by_addr>().end()) {
+      m_peers_gray.erase(iterator);
+    }
+
+    return true;
+
+    CATCH_ENTRY_L0("peerlist_manager::remove_from_peer_gray()", false);
+  }
+    //--------------------------------------------------------------------------------------------------
 }
 
-BOOST_CLASS_VERSION(nodetool::peerlist_manager, 4)
+BOOST_CLASS_VERSION(nodetool::peerlist_manager, CURRENT_PEERLIST_STORAGE_ARCHIVE_VER)

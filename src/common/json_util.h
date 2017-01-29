@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2016, The Monero Project
+// Copyright (c) 2016, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -25,29 +25,29 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#pragma once
+#pragma once 
 
-#include "targetver.h"
-
-
-#if !defined(__GNUC__) 
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-#endif 
-
-
-
-#include <stdio.h>
-
-
-#define BOOST_FILESYSTEM_VERSION 3
-#define ENABLE_RELEASE_LOGGING
-#include "log_opt_defs.h"
-#include "misc_log_ex.h"
-
-
+#define GET_FIELD_FROM_JSON_RETURN_ON_ERROR(json, name, type, jtype, mandatory, def) \
+  type field_##name = def; \
+  bool field_##name##_found = false; \
+  (void)field_##name##_found; \
+  do if (json.HasMember(#name)) \
+  { \
+    if (json[#name].Is##jtype()) \
+    { \
+      field_##name = json[#name].Get##jtype(); \
+      field_##name##_found = true; \
+    } \
+    else \
+    { \
+      LOG_ERROR("Field " << #name << " found in JSON, but not " << #jtype); \
+      return false; \
+    } \
+  } \
+  else if (mandatory) \
+  { \
+    LOG_ERROR("Field " << #name << " not found in JSON"); \
+    return false; \
+  } while(0)
 

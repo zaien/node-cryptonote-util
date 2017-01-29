@@ -25,29 +25,13 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
 
-#include "targetver.h"
+#define QT_TRANSLATE_NOOP(context,str) i18n_translate(str,context)
 
-
-#if !defined(__GNUC__) 
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-#endif 
-
-
-
-#include <stdio.h>
-
-
-#define BOOST_FILESYSTEM_VERSION 3
-#define ENABLE_RELEASE_LOGGING
-#include "log_opt_defs.h"
-#include "misc_log_ex.h"
-
-
-
+std::string i18n_get_language();
+int i18n_set_language(const char *directory, const char *base, std::string language = std::string());
+const char *i18n_translate(const char *str, const std::string &context);
+static inline std::string get_default_i18n_context() { return std::string(); }
+static inline const char *tr(const char *str) { return i18n_translate(str,get_default_i18n_context()); }

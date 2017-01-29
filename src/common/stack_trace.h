@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2016, The Monero Project
+// Copyright (c) 2016, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -25,29 +25,19 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#pragma once
+#ifndef MONERO_EXCEPTION_H
+#define MONERO_EXCEPTION_H
 
-#include "targetver.h"
+#include <stdexcept>
+#include <string>
 
+namespace tools
+{
 
-#if !defined(__GNUC__) 
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-#endif 
+void set_stack_trace_log(const std::string &log);
+void log_stack_trace(const char *msg);
 
+}  // namespace tools
 
-
-#include <stdio.h>
-
-
-#define BOOST_FILESYSTEM_VERSION 3
-#define ENABLE_RELEASE_LOGGING
-#include "log_opt_defs.h"
-#include "misc_log_ex.h"
-
-
-
+#endif

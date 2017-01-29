@@ -25,29 +25,47 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
 
-#include "targetver.h"
+#include "string_tools.h"
+#include "net/http_client.h"
 
+namespace tools {
 
-#if !defined(__GNUC__) 
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-#endif 
+class t_http_connection {
+private:
+  epee::net_utils::http::http_simple_client * mp_http_client;
+  bool m_ok;
+public:
+  static unsigned int const TIMEOUT = 200000;
 
+  t_http_connection(
+      epee::net_utils::http::http_simple_client * p_http_client
+    , uint32_t ip
+    , uint16_t port
+    )
+    : mp_http_client(p_http_client)
+    , m_ok(false)
+  {
+    // TODO fix http client so that it accepts properly typed arguments
+    std::string ip_str = epee::string_tools::get_ip_string_from_int32(ip);
+    std::string port_str = boost::lexical_cast<std::string>(port);
+    m_ok = mp_http_client->connect(ip_str, port_str, TIMEOUT);
+  }
 
+  ~t_http_connection()
+  {
+    if (m_ok)
+    {
+      mp_http_client->disconnect();
+    }
+  }
 
-#include <stdio.h>
+  bool is_open() const
+  {
+    return m_ok;
+  }
+}; // class t_http_connection
 
-
-#define BOOST_FILESYSTEM_VERSION 3
-#define ENABLE_RELEASE_LOGGING
-#include "log_opt_defs.h"
-#include "misc_log_ex.h"
-
-
-
+} // namespace tools

@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2016, The Monero Project
+// Copyright (c) 2016, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -25,29 +25,27 @@
 // INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
 // STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
 // THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-// 
-// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
-#pragma once
+#include "perf_timer.h"
 
-#include "targetver.h"
+#undef MONERO_DEFAULT_LOG_CATEGORY
+#define MONERO_DEFAULT_LOG_CATEGORY "perf"
 
+namespace tools
+{
 
-#if !defined(__GNUC__) 
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-#endif 
+el::Level performance_timer_log_level = el::Level::Debug;
+__thread std::vector<PerformanceTimer*> *performance_timers = NULL;
 
+void set_performance_timer_log_level(el::Level level)
+{
+  if (level != el::Level::Debug && level != el::Level::Trace && level != el::Level::Info
+   && level != el::Level::Warning && level != el::Level::Error && level != el::Level::Fatal)
+  {
+    MERROR("Wrong log level: " << el::LevelHelper::convertToString(level) << ", using Debug");
+    level = el::Level::Debug;
+  }
+  performance_timer_log_level = level;
+}
 
-
-#include <stdio.h>
-
-
-#define BOOST_FILESYSTEM_VERSION 3
-#define ENABLE_RELEASE_LOGGING
-#include "log_opt_defs.h"
-#include "misc_log_ex.h"
-
-
-
+}
