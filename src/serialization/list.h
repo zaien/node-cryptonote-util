@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2016, The Monero Project
+// Copyright (c) 2014-2015, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -29,33 +29,72 @@
 // Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
-#include <memory>
+
 #include "serialization.h"
 
-template <template <bool> class Archive>
-inline bool do_serialize(Archive<false>& ar, std::string& str)
+namespace serialization
 {
-  size_t size = 0;
-  ar.serialize_varint(size);
-  if (ar.remaining_bytes() < size)
+  namespace detail
   {
+    template <typename Archive, class T>
+    bool serialize_list_element(Archive& ar, T& e)
+    {
+      return ::do_serialize(ar, e);
+    }
+
+    template <typename Archive>
+    bool serialize_list_element(Archive& ar, uint64_t& e)
+    {
+      ar.serialize_varint(e);
+      return true;
+    }
+  }
+}
+
+template <template <bool> class Archive, class T>
+bool do_serialize(Archive<false> &ar, std::list<T> &l)
+{
+  size_t cnt;
+  ar.begin_array(cnt);
+  if (!ar.stream().good())
+    return false;
+  l.clear();
+
+  // very basic sanity check
+  if (ar.remaining_bytes() < cnt) {
     ar.stream().setstate(std::ios::failbit);
     return false;
   }
 
-  std::unique_ptr<std::string::value_type[]> buf(new std::string::value_type[size]);
-  ar.serialize_blob(buf.get(), size);
-  str.erase();
-  str.append(buf.get(), size);
+  for (size_t i = 0; i < cnt; i++) {
+    if (i > 0)
+      ar.delimit_array();
+    l.push_back(T());
+    T &t = l.back();
+    if (!::serialization::detail::serialize_list_element(ar, t))
+      return false;
+    if (!ar.stream().good())
+      return false;
+  }
+  ar.end_array();
   return true;
 }
 
-
-template <template <bool> class Archive>
-inline bool do_serialize(Archive<true>& ar, std::string& str)
+template <template <bool> class Archive, class T>
+bool do_serialize(Archive<true> &ar, std::list<T> &l)
 {
-  size_t size = str.size();
-  ar.serialize_varint(size);
-  ar.serialize_blob(const_cast<std::string::value_type*>(str.c_str()), size);
+  size_t cnt = l.size();
+  ar.begin_array(cnt);
+  for (typename std::list<T>::iterator i = l.begin(); i != l.end(); ++i) {
+    if (!ar.stream().good())
+      return false;
+    if (i != l.begin())
+      ar.delimit_array();
+    if(!::serialization::detail::serialize_list_element(ar, *i))
+      return false;
+    if (!ar.stream().good())
+      return false;
+  }
+  ar.end_array();
   return true;
 }

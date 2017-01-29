@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2016, The Monero Project
+// Copyright (c) 2014-2015, The Monero Project
 // 
 // All rights reserved.
 // 
@@ -32,30 +32,65 @@
 #include <memory>
 #include "serialization.h"
 
-template <template <bool> class Archive>
-inline bool do_serialize(Archive<false>& ar, std::string& str)
+namespace serialization
 {
-  size_t size = 0;
-  ar.serialize_varint(size);
-  if (ar.remaining_bytes() < size)
+  namespace detail
   {
-    ar.stream().setstate(std::ios::failbit);
-    return false;
+    template <typename Archive, class T>
+    bool serialize_pair_element(Archive& ar, T& e)
+    {
+      return ::do_serialize(ar, e);
+    }
+
+    template <typename Archive>
+    bool serialize_pair_element(Archive& ar, uint64_t& e)
+    {
+      ar.serialize_varint(e);
+      return true;
+    }
   }
-
-  std::unique_ptr<std::string::value_type[]> buf(new std::string::value_type[size]);
-  ar.serialize_blob(buf.get(), size);
-  str.erase();
-  str.append(buf.get(), size);
-  return true;
 }
 
-
-template <template <bool> class Archive>
-inline bool do_serialize(Archive<true>& ar, std::string& str)
+template <template <bool> class Archive, class F, class S>
+inline bool do_serialize(Archive<false>& ar, std::pair<F,S>& p)
 {
-  size_t size = str.size();
-  ar.serialize_varint(size);
-  ar.serialize_blob(const_cast<std::string::value_type*>(str.c_str()), size);
+  size_t cnt;
+  ar.begin_array(cnt);
+  if (!ar.stream().good())
+    return false;
+  if (cnt != 2)
+    return false;
+
+  if (!::serialization::detail::serialize_pair_element(ar, p.first))
+    return false;
+  if (!ar.stream().good())
+    return false;
+  ar.delimit_array();
+  if (!::serialization::detail::serialize_pair_element(ar, p.second))
+    return false;
+  if (!ar.stream().good())
+    return false;
+
+  ar.end_array();
   return true;
 }
+
+template <template <bool> class Archive, class F, class S>
+inline bool do_serialize(Archive<true>& ar, std::pair<F,S>& p)
+{
+  ar.begin_array(2);
+  if (!ar.stream().good())
+    return false;
+  if(!::serialization::detail::serialize_pair_element(ar, p.first))
+    return false;
+  if (!ar.stream().good())
+    return false;
+  ar.delimit_array();
+  if(!::serialization::detail::serialize_pair_element(ar, p.second))
+    return false;
+  if (!ar.stream().good())
+    return false;
+  ar.end_array();
+  return true;
+}
+
