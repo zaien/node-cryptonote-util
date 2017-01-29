@@ -1,12 +1,37 @@
-// Copyright (c) 2012-2013 The Cryptonote developers
-// Distributed under the MIT/X11 software license, see the accompanying
-// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+// Copyright (c) 2014-2016, The Monero Project
+// 
+// All rights reserved.
+// 
+// Redistribution and use in source and binary forms, with or without modification, are
+// permitted provided that the following conditions are met:
+// 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
+//    conditions and the following disclaimer.
+// 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list
+//    of conditions and the following disclaimer in the documentation and/or other
+//    materials provided with the distribution.
+// 
+// 3. Neither the name of the copyright holder nor the names of its contributors may be
+//    used to endorse or promote products derived from this software without specific
+//    prior written permission.
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+// THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+// STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+// THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+// 
+// Parts of this file are originally copyright (c) 2012-2013 The Cryptonote developers
 
 #pragma once
 
 #include <boost/variant.hpp>
 #include <boost/functional/hash/hash.hpp>
-#include <iostream>
 #include <vector>
 #include <cstring>  // memcmp
 #include <sstream>
@@ -24,19 +49,13 @@
 #include "crypto/hash.h"
 #include "misc_language.h"
 #include "tx_extra.h"
-
+#include "ringct/rctTypes.h"
 
 namespace cryptonote
 {
-  struct block;
-  class transaction;
-  struct tx_extra_merge_mining_tag;
-
-  // Implemented in cryptonote_format_utils.cpp
-  bool get_transaction_hash(const transaction& t, crypto::hash& res);
-  bool get_mm_tag_from_extra(const std::vector<uint8_t>& tx, tx_extra_merge_mining_tag& mm_tag);
 
   const static crypto::hash null_hash = AUTO_VAL_INIT(null_hash);
+  const static crypto::hash8 null_hash8 = AUTO_VAL_INIT(null_hash8);
   const static crypto::public_key null_pkey = AUTO_VAL_INIT(null_pkey);
 
   typedef std::vector<crypto::signature> ring_signature;
@@ -66,16 +85,6 @@ namespace cryptonote
     txout_to_key(const crypto::public_key &_key) : key(_key) { }
     crypto::public_key key;
   };
-
-  #pragma pack(push, 1)
-  struct bb_txout_to_key
-  {
-    bb_txout_to_key() { }
-    bb_txout_to_key(const crypto::public_key &_key) : key(_key) { }
-    crypto::public_key key;
-    uint8_t mix_attr;
-  };
-  #pragma pack(pop)
 
 
   /* inputs */
@@ -134,7 +143,6 @@ namespace cryptonote
   typedef boost::variant<txin_gen, txin_to_script, txin_to_scripthash, txin_to_key> txin_v;
 
   typedef boost::variant<txout_to_script, txout_to_scripthash, txout_to_key> txout_target_v;
-  typedef boost::variant<txout_to_script, txout_to_scripthash, bb_txout_to_key> bb_txout_target_v;
 
   //typedef std::pair<uint64_t, txout> out_t;
   struct tx_out
@@ -146,16 +154,8 @@ namespace cryptonote
       VARINT_FIELD(amount)
       FIELD(target)
     END_SERIALIZE()
-  };
-  struct bb_tx_out
-  {
-    uint64_t amount;
-    bb_txout_target_v target;
 
-    BEGIN_SERIALIZE_OBJECT()
-      VARINT_FIELD(amount)
-      FIELD(target)
-    END_SERIALIZE()
+
   };
 
   class transaction_prefix
@@ -173,15 +173,14 @@ namespace cryptonote
 
     BEGIN_SERIALIZE()
       VARINT_FIELD(version)
-      if(CURRENT_TRANSACTION_VERSION < version) return false;
+      if(version == 0 || CURRENT_TRANSACTION_VERSION < version) return false;
       VARINT_FIELD(unlock_time)
       FIELD(vin)
       FIELD(vout)
       FIELD(extra)
     END_SERIALIZE()
 
-
-  protected:
+  public:
     transaction_prefix(){}
   };
 
@@ -189,6 +188,7 @@ namespace cryptonote
   {
   public:
     std::vector<std::vector<crypto::signature> > signatures; //count signatures  always the same as inputs count
+    rct::rctSig rct_signatures;
 
     transaction();
     virtual ~transaction();
@@ -197,80 +197,60 @@ namespace cryptonote
     BEGIN_SERIALIZE_OBJECT()
       FIELDS(*static_cast<transaction_prefix *>(this))
 
-      ar.tag("signatures");
-      ar.begin_array();
-      PREPARE_CUSTOM_VECTOR_SERIALIZATION(vin.size(), signatures);
-      bool signatures_not_expected = signatures.empty();
-      if (!signatures_not_expected && vin.size() != signatures.size())
-        return false;
-
-      for (size_t i = 0; i < vin.size(); ++i)
+      if (version == 1)
       {
-        size_t signature_size = get_signature_size(vin[i]);
-        if (signatures_not_expected)
-        {
-          if (0 == signature_size)
-            continue;
-          else
-            return false;
-        }
-
-        PREPARE_CUSTOM_VECTOR_SERIALIZATION(signature_size, signatures[i]);
-        if (signature_size != signatures[i].size())
+        ar.tag("signatures");
+        ar.begin_array();
+        PREPARE_CUSTOM_VECTOR_SERIALIZATION(vin.size(), signatures);
+        bool signatures_not_expected = signatures.empty();
+        if (!signatures_not_expected && vin.size() != signatures.size())
           return false;
 
-        FIELDS(signatures[i]);
+        for (size_t i = 0; i < vin.size(); ++i)
+        {
+          size_t signature_size = get_signature_size(vin[i]);
+          if (signatures_not_expected)
+          {
+            if (0 == signature_size)
+              continue;
+            else
+              return false;
+          }
 
-        if (vin.size() - i > 1)
-          ar.delimit_array();
+          PREPARE_CUSTOM_VECTOR_SERIALIZATION(signature_size, signatures[i]);
+          if (signature_size != signatures[i].size())
+            return false;
+
+          FIELDS(signatures[i]);
+
+          if (vin.size() - i > 1)
+            ar.delimit_array();
+        }
+        ar.end_array();
       }
-      ar.end_array();
+      else
+      {
+        ar.tag("rct_signatures");
+        if (!vin.empty())
+        {
+          ar.begin_object();
+          bool r = rct_signatures.serialize_rctsig_base(ar, vin.size(), vout.size());
+          if (!r || !ar.stream().good()) return false;
+          ar.end_object();
+          if (rct_signatures.type != rct::RCTTypeNull)
+          {
+            ar.tag("rctsig_prunable");
+            ar.begin_object();
+            r = rct_signatures.p.serialize_rctsig_prunable(ar, rct_signatures.type, vin.size(), vout.size(),
+                vin[0].type() == typeid(txin_to_key) ? boost::get<txin_to_key>(vin[0]).key_offsets.size() - 1 : 0);
+            if (!r || !ar.stream().good()) return false;
+            ar.end_object();
+          }
+        }
+      }
     END_SERIALIZE()
 
   private:
-    static size_t get_signature_size(const txin_v& tx_in);
-  };
-
-  class bb_transaction_prefix
-  {
-
-  public:
-    // tx information
-    size_t   version;
-    uint64_t unlock_time;  //number of block (or time), used as a limitation like: spend this tx not early then block/time
-
-    std::vector<txin_v> vin;
-    std::vector<bb_tx_out> vout;
-    //extra
-    std::vector<uint8_t> extra;
-
-    BEGIN_SERIALIZE()
-      VARINT_FIELD(version)
-      VARINT_FIELD(unlock_time)
-      FIELD(vin)
-      FIELD(vout)
-      FIELD(extra)
-    END_SERIALIZE()
-
-
-  protected:
-    bb_transaction_prefix(){}
-  };
-
-  class bb_transaction: public bb_transaction_prefix
-  {
-  public:
-    std::vector<std::vector<crypto::signature> > signatures; //count signatures  always the same as inputs count
-
-    bb_transaction();
-    virtual ~bb_transaction();
-    void set_null();
-
-    BEGIN_SERIALIZE_OBJECT()
-      FIELDS(*static_cast<bb_transaction_prefix *>(this))
-      FIELD(signatures)
-    END_SERIALIZE()
-
     static size_t get_signature_size(const txin_v& tx_in);
   };
 
@@ -290,53 +270,17 @@ namespace cryptonote
   inline
   void transaction::set_null()
   {
-    version = 0;
+    version = 1;
     unlock_time = 0;
     vin.clear();
     vout.clear();
     extra.clear();
     signatures.clear();
+    rct_signatures.type = rct::RCTTypeNull;
   }
 
   inline
   size_t transaction::get_signature_size(const txin_v& tx_in)
-  {
-    struct txin_signature_size_visitor : public boost::static_visitor<size_t>
-    {
-      size_t operator()(const txin_gen& txin) const{return 0;}
-      size_t operator()(const txin_to_script& txin) const{return 0;}
-      size_t operator()(const txin_to_scripthash& txin) const{return 0;}
-      size_t operator()(const txin_to_key& txin) const {return txin.key_offsets.size();}
-    };
-
-    return boost::apply_visitor(txin_signature_size_visitor(), tx_in);
-  }
-
-  inline
-  bb_transaction::bb_transaction()
-  {
-    set_null();
-  }
-
-  inline
-  bb_transaction::~bb_transaction()
-  {
-    //set_null();
-  }
-
-  inline
-  void bb_transaction::set_null()
-  {
-    version = 0;
-    unlock_time = 0;
-    vin.clear();
-    vout.clear();
-    extra.clear();
-    signatures.clear();
-  }
-
-  inline
-  size_t bb_transaction::get_signature_size(const txin_v& tx_in)
   {
     struct txin_signature_size_visitor : public boost::static_visitor<size_t>
     {
@@ -354,109 +298,16 @@ namespace cryptonote
   /************************************************************************/
   /*                                                                      */
   /************************************************************************/
-
-  const uint8_t CURRENT_BYTECOIN_BLOCK_MAJOR_VERSION = 1;
-
-  struct bytecoin_block
-  {
-    uint8_t major_version;
-    uint8_t minor_version;
-    crypto::hash prev_id;
-    uint32_t nonce;
-    size_t number_of_transactions;
-    std::vector<crypto::hash> miner_tx_branch;
-    transaction miner_tx;
-    std::vector<crypto::hash> blockchain_branch;
-  };
-
-  struct serializable_bytecoin_block
-  {
-    bytecoin_block& b;
-    uint64_t& timestamp;
-    bool hashing_serialization;
-    bool header_only;
-
-    serializable_bytecoin_block(bytecoin_block& b_, uint64_t& timestamp_, bool hashing_serialization_, bool header_only_) :
-      b(b_), timestamp(timestamp_), hashing_serialization(hashing_serialization_), header_only(header_only_)
-    {
-    }
-
-    BEGIN_SERIALIZE_OBJECT()
-      VARINT_FIELD_N("major_version", b.major_version);
-      if(b.major_version > CURRENT_BYTECOIN_BLOCK_MAJOR_VERSION) return false;
-      VARINT_FIELD_N("minor_version", b.minor_version);
-      VARINT_FIELD(timestamp);
-      FIELD_N("prev_id", b.prev_id);
-      FIELD_N("nonce", b.nonce);
-
-      if (hashing_serialization)
-      {
-        crypto::hash miner_tx_hash;
-        if (!get_transaction_hash(b.miner_tx, miner_tx_hash))
-          return false;
-
-        crypto::hash merkle_root;
-        crypto::tree_hash_from_branch(b.miner_tx_branch.data(), b.miner_tx_branch.size(), miner_tx_hash, 0, merkle_root);
-
-        FIELD(merkle_root);
-      }
-
-      VARINT_FIELD_N("number_of_transactions", b.number_of_transactions);
-      if (b.number_of_transactions < 1)
-        return false;
-
-      if (!header_only)
-      {
-        ar.tag("miner_tx_branch");
-        ar.begin_array();
-        size_t branch_size = crypto::tree_depth(b.number_of_transactions);
-        PREPARE_CUSTOM_VECTOR_SERIALIZATION(branch_size, const_cast<bytecoin_block&>(b).miner_tx_branch);
-        if (b.miner_tx_branch.size() != branch_size)
-          return false;
-        for (size_t i = 0; i < branch_size; ++i)
-        {
-          FIELDS(b.miner_tx_branch[i]);
-          if (i + 1 < branch_size)
-            ar.delimit_array();
-        }
-        ar.end_array();
-
-        FIELD(b.miner_tx);
-
-        tx_extra_merge_mining_tag mm_tag;
-        if (!get_mm_tag_from_extra(b.miner_tx.extra, mm_tag))
-          return false;
-
-        ar.tag("blockchain_branch");
-        ar.begin_array();
-        PREPARE_CUSTOM_VECTOR_SERIALIZATION(mm_tag.depth, const_cast<bytecoin_block&>(b).blockchain_branch);
-        if (mm_tag.depth != b.blockchain_branch.size())
-          return false;
-        for (size_t i = 0; i < mm_tag.depth; ++i)
-        {
-          FIELDS(b.blockchain_branch[i]);
-          if (i + 1 < mm_tag.depth)
-            ar.delimit_array();
-        }
-        ar.end_array();
-      }
-    END_SERIALIZE()
-  };
-
-  // Implemented below
-  inline serializable_bytecoin_block make_serializable_bytecoin_block(const block& b, bool hashing_serialization, bool header_only);
-
   struct block_header
   {
     uint8_t major_version;
-    uint8_t minor_version;
+    uint8_t minor_version;  // now used as a voting mechanism, rather than how this particular block is built
     uint64_t timestamp;
-    crypto::hash prev_id;
+    crypto::hash  prev_id;
     uint32_t nonce;
 
     BEGIN_SERIALIZE()
       VARINT_FIELD(major_version)
-      if(major_version > BLOCK_MAJOR_VERSION_2) return false;
       VARINT_FIELD(minor_version)
       VARINT_FIELD(timestamp)
       FIELD(prev_id)
@@ -466,56 +317,11 @@ namespace cryptonote
 
   struct block: public block_header
   {
-    bytecoin_block parent_block;
-
     transaction miner_tx;
     std::vector<crypto::hash> tx_hashes;
 
     BEGIN_SERIALIZE_OBJECT()
       FIELDS(*static_cast<block_header *>(this))
-//      if (BLOCK_MAJOR_VERSION_2 <= major_version)
-//      {
-//        auto sbb = make_serializable_bytecoin_block(*this, false, false);
-//        FIELD_N("parent_block", sbb);
-//      }
-      FIELD(miner_tx)
-      FIELD(tx_hashes)
-    END_SERIALIZE()
-  };
-
-  inline serializable_bytecoin_block make_serializable_bytecoin_block(const block& b, bool hashing_serialization, bool header_only)
-  {
-    block& block_ref = const_cast<block&>(b);
-    return serializable_bytecoin_block(block_ref.parent_block, block_ref.timestamp, hashing_serialization, header_only);
-  }
-
-
-  struct bb_block_header
-  {
-    uint8_t major_version;
-    uint8_t minor_version;
-    uint64_t timestamp;
-    crypto::hash  prev_id;
-    uint64_t nonce;
-    uint8_t flags;
-
-    BEGIN_SERIALIZE()
-      FIELD(major_version)
-      FIELD(nonce)
-      FIELD(prev_id)
-      VARINT_FIELD(minor_version)
-      VARINT_FIELD(timestamp)
-      FIELD(flags)
-    END_SERIALIZE()
-  };
-
-  struct bb_block: public bb_block_header
-  {
-    bb_transaction miner_tx;
-    std::vector<crypto::hash> tx_hashes;
-
-    BEGIN_SERIALIZE()
-      FIELDS(*static_cast<bb_block_header *>(this))
       FIELD(miner_tx)
       FIELD(tx_hashes)
     END_SERIALIZE()
@@ -558,7 +364,6 @@ namespace cryptonote
 }
 
 BLOB_SERIALIZER(cryptonote::txout_to_key);
-BLOB_SERIALIZER(cryptonote::bb_txout_to_key);
 BLOB_SERIALIZER(cryptonote::txout_to_scripthash);
 
 VARIANT_TAG(binary_archive, cryptonote::txin_gen, 0xff);
@@ -568,7 +373,6 @@ VARIANT_TAG(binary_archive, cryptonote::txin_to_key, 0x2);
 VARIANT_TAG(binary_archive, cryptonote::txout_to_script, 0x0);
 VARIANT_TAG(binary_archive, cryptonote::txout_to_scripthash, 0x1);
 VARIANT_TAG(binary_archive, cryptonote::txout_to_key, 0x2);
-VARIANT_TAG(binary_archive, cryptonote::bb_txout_to_key, 0x2);
 VARIANT_TAG(binary_archive, cryptonote::transaction, 0xcc);
 VARIANT_TAG(binary_archive, cryptonote::block, 0xbb);
 
@@ -579,7 +383,6 @@ VARIANT_TAG(json_archive, cryptonote::txin_to_key, "key");
 VARIANT_TAG(json_archive, cryptonote::txout_to_script, "script");
 VARIANT_TAG(json_archive, cryptonote::txout_to_scripthash, "scripthash");
 VARIANT_TAG(json_archive, cryptonote::txout_to_key, "key");
-VARIANT_TAG(json_archive, cryptonote::bb_txout_to_key, "key");
 VARIANT_TAG(json_archive, cryptonote::transaction, "tx");
 VARIANT_TAG(json_archive, cryptonote::block, "block");
 
@@ -590,6 +393,5 @@ VARIANT_TAG(debug_archive, cryptonote::txin_to_key, "key");
 VARIANT_TAG(debug_archive, cryptonote::txout_to_script, "script");
 VARIANT_TAG(debug_archive, cryptonote::txout_to_scripthash, "scripthash");
 VARIANT_TAG(debug_archive, cryptonote::txout_to_key, "key");
-VARIANT_TAG(debug_archive, cryptonote::bb_txout_to_key, "key");
 VARIANT_TAG(debug_archive, cryptonote::transaction, "tx");
 VARIANT_TAG(debug_archive, cryptonote::block, "block");
