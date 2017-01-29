@@ -321,12 +321,66 @@ void address_decode(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     }
 }
 
+void address_prefix(const Nan::FunctionCallbackInfo<v8::Value>& info) {
+
+    if (info.Length() < 1)
+        return THROW_ERROR_EXCEPTION("You must provide one argument.");
+
+    Local<Object> target = info[0]->ToObject();
+
+    if (!Buffer::HasInstance(target))
+        return THROW_ERROR_EXCEPTION("Argument should be a buffer object.");
+
+    blobdata input = std::string(Buffer::Data(target), Buffer::Length(target));
+
+    blobdata data;
+    uint64_t prefix;
+    if (!tools::base58::decode_addr(input, prefix, data))
+    {
+        info.GetReturnValue().Set(Nan::Undefined());
+    }
+    //    info.GetReturnValue().Set(Nan::Undefined());
+
+
+    account_public_address adr;
+    if(!::serialization::parse_binary(data, adr)){
+        return THROW_ERROR_EXCEPTION("Unable to parse binary");
+    }
+    if(!crypto::check_key(adr.m_spend_public_key)){
+        return THROW_ERROR_EXCEPTION("Spend Public Key bug");
+    }
+    if(!crypto::check_key(adr.m_view_public_key)){
+        return THROW_ERROR_EXCEPTION("View Public key bug");
+    }
+    if (!::serialization::parse_binary(data, adr) || !crypto::check_key(adr.m_spend_public_key) || !crypto::check_key(adr.m_view_public_key))
+    {
+        if(data.length())
+        {
+            data = uint64be_to_blob(prefix) + data;
+        }
+        else
+        {
+            info.GetReturnValue().Set(Nan::Undefined());
+        }
+        v8::Local<v8::Value> returnValue = Nan::CopyBuffer((char*)data.data(), data.size()).ToLocalChecked();
+        info.GetReturnValue().Set(
+                returnValue
+        );
+
+    }
+    else
+    {
+        info.GetReturnValue().Set(Nan::New(static_cast<uint32_t>(prefix)));
+    }
+}
+
 NAN_MODULE_INIT(init) {
     Nan::Set(target, Nan::New("construct_block_blob").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(construct_block_blob)).ToLocalChecked());
     Nan::Set(target, Nan::New("get_block_id").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(get_block_id)).ToLocalChecked());
     Nan::Set(target, Nan::New("convert_blob").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(convert_blob)).ToLocalChecked());
     Nan::Set(target, Nan::New("convert_blob_bb").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(convert_blob_bb)).ToLocalChecked());
     Nan::Set(target, Nan::New("address_decode").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(address_decode)).ToLocalChecked());
+    Nan::Set(target, Nan::New("address_prefix").ToLocalChecked(), Nan::GetFunction(Nan::New<FunctionTemplate>(address_prefix)).ToLocalChecked());
 }
 
 NODE_MODULE(cryptonote, init)
