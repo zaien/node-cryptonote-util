@@ -16,12 +16,16 @@ namespace crypto {
   }
 
 #pragma pack(push, 1)
-  POD_CLASS hash {
-    char data[HASH_SIZE];
-  };
+    POD_CLASS hash {
+            char data[HASH_SIZE];
+    };
+    POD_CLASS hash8 {
+            char data[8];
+    };
 #pragma pack(pop)
 
   static_assert(sizeof(hash) == HASH_SIZE, "Invalid structure size");
+  static_assert(sizeof(hash8) == 8, "Invalid structure size");
 
   /*
     Cryptonight hash functions
@@ -58,3 +62,4 @@ namespace crypto {
 }
 
 CRYPTO_MAKE_HASHABLE(hash)
+CRYPTO_MAKE_COMPARABLE(hash8)
