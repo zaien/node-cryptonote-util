@@ -299,12 +299,6 @@ void address_decode(const Nan::FunctionCallbackInfo<v8::Value>& info) {
     
 
     account_public_address adr;
-    if(!crypto::check_key(adr.m_spend_public_key)){
-        return THROW_ERROR_EXCEPTION("Spend key bug");
-    }
-    if(!crypto::check_key(adr.m_view_public_key)){
-        return THROW_ERROR_EXCEPTION("View key bug");
-    }
     if (!::serialization::parse_binary(data, adr) || !crypto::check_key(adr.m_spend_public_key) || !crypto::check_key(adr.m_view_public_key))
     {
         if(data.length())
